@@ -9,7 +9,7 @@
 </head>
 <body><main class="wrap"><section class="card">
 <h1>Escáner de Facturas QR</h1><p class="muted">Escanea el QR de una factura electrónica peruana.</p>
-<span class="pill">Versión 5 · Guardado en Google Sheets</span>
+<span class="pill">Versión 6 · Corrección de número de factura</span>
 <button id="start" type="button">📷 Abrir cámara</button><button id="stop" class="secondary" type="button" hidden>Cerrar cámara</button><div id="reader"></div>
 <p class="muted">O selecciona una fotografía del QR:</p><input type="file" id="file" accept="image/*">
 <p class="muted">También puedes pegar el texto del QR:</p><textarea id="raw" placeholder="20100049181|01|F533|0475238|7.66|50.20|2026-10-10|6|20616651928"></textarea>
@@ -26,6 +26,7 @@ const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxc_xE7TK-hAqWGnkCIi
 const el=id=>document.getElementById(id);
 const names=['RUC emisor','Tipo de comprobante','Serie','Número de factura','IGV','Importe total','Fecha de emisión','Tipo documento receptor','RUC receptor'];
 let scanner=null,active=false,processing=false,sending=false,lastRaw='';
+const invalidNumber = value => !/^[0-9]+$/.test(String(value||'').trim()) || /^0+$/.test(String(value||'').trim());
 function report(msg,ok=false){el('status').textContent=msg;el('status').className=ok?'success':'error';}
 function errorText(e){return typeof e==='string'?e:e?.message||String(e);}
 function interpret(raw){
@@ -35,10 +36,24 @@ function interpret(raw){
   lastRaw=original;el('raw').value=original;
   const p=limpio.split('|').map(s=>s.trim());
   const grid=el('grid');grid.replaceChildren();
-  p.slice(0,9).forEach((value,i)=>{const label=document.createElement('label');label.textContent=names[i];const input=document.createElement('input');input.type='text';input.readOnly=true;input.value=value;grid.append(label,input);});
+  for(let i=0;i<9;i++){
+    const label=document.createElement('label');label.textContent=names[i];
+    const input=document.createElement('input');input.type='text';input.value=p[i]||'';
+    if(i===3){
+      input.id='numeroFactura';input.readOnly=false;input.inputMode='numeric';
+      input.placeholder='Escribe el número impreso en la factura';
+      if(invalidNumber(input.value)){
+        input.value='';input.style.border='2px solid #c57b19';
+        const note=document.createElement('p');note.className='muted';
+        note.textContent='El QR no contiene un número de factura válido. Ingresa el número que aparece impreso, conservando los ceros iniciales.';
+        grid.append(label,input,note);continue;
+      }
+    }else{input.readOnly=true;}
+    grid.append(label,input);
+  }
   el('fields').style.display=p.length?'block':'none';
   el('save').hidden=false;
-  report('QR leído. Revisa los datos y pulsa Guardar factura.',true);
+  report(invalidNumber(p[3])?'QR leído. Ingresa el número de factura impreso antes de guardar.':'QR leído. Revisa el número de factura y pulsa Guardar.',true);
 }
 async function stop(){if(scanner){if(active){try{await scanner.stop();}catch(e){}}try{scanner.clear();}catch(e){}scanner=null;}active=false;el('start').hidden=false;el('stop').hidden=true;}
 el('start').addEventListener('click',async()=>{
@@ -58,10 +73,12 @@ el('save').addEventListener('click',()=>{
   if(sending)return;
   if(!SCRIPT_URL.startsWith('https://script.google.com/macros/s/')||!SCRIPT_URL.endsWith('/exec')){report('Falta configurar SCRIPT_URL con la URL /exec de Apps Script.');return;}
   if(!lastRaw.trim()){report('Primero escanea o interpreta un QR.');return;}
+  const numero=el('numeroFactura')?.value.trim()||'';
+  if(invalidNumber(numero)){report('Ingresa un número de factura válido. No se acepta 00000000 ni un campo vacío.');el('numeroFactura')?.focus();return;}
   sending=true;el('save').disabled=true;report('Guardando factura...',true);
   const frame=document.createElement('iframe');frame.name='save_'+Date.now();frame.style.display='none';document.body.append(frame);
   const form=document.createElement('form');form.method='POST';form.action=SCRIPT_URL;form.target=frame.name;form.style.display='none';
-  for(const [key,value] of Object.entries({action:'saveInvoice',raw:lastRaw})){const input=document.createElement('input');input.name=key;input.value=value;form.append(input);}document.body.append(form);
+  for(const [key,value] of Object.entries({action:'saveInvoice',raw:lastRaw,numeroFactura:numero})){const input=document.createElement('input');input.name=key;input.value=value;form.append(input);}document.body.append(form);
   const onMessage=event=>{
     if(!/^https:\/\/(script\.google\.com|script\.googleusercontent\.com|[a-z0-9.-]*googleusercontent\.com)$/.test(event.origin))return;
     const data=event.data;
