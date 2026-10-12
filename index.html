@@ -17,7 +17,47 @@ const el=id=>document.getElementById(id);let scanner=null;let active=false;
 const names=['RUC emisor','Tipo comprobante','Serie','Número de factura','IGV','Importe total','Fecha emisión','Tipo documento receptor','RUC receptor'];
 function report(message,ok=false){el('status').textContent=message;el('status').className=ok?'ok':'err'}
 function errorText(e){return typeof e==='string'?e:(e?.message||String(e))}
-function interpret(raw){alert("QR leído: " + raw);const p=String(raw||'').trim().split('|').map(v=>v.trim());if(p.length!==9){report('El QR no contiene los 9 campos esperados.');return}if(!/^\d{11}$/.test(p[0])||!/^\d{11}$/.test(p[8])){report('El formato de los RUC no es válido.');return}el('grid').replaceChildren();p.forEach((v,i)=>{const label=document.createElement('label');label.textContent=names[i];const input=document.createElement('input');input.value=v;input.readOnly=true;el('grid').append(label,input)});el('fields').style.display='block';el('raw').value=p.join('|');report('QR reconocido correctamente. Esta versión solo permite comprobar la lectura; no guarda datos.',true)}
+function interpret(raw) {
+  // Eliminar saltos de línea y espacios invisibles
+  const limpio = String(raw || '')
+    .replace(/[\r\n\u2028\u2029]/g, '')
+    .trim();
+
+  // Separar los campos del QR
+  const p = limpio.split('|').map(v => v.trim());
+
+  if (p.length !== 9) {
+    report(
+      'Se detectaron ' + p.length +
+      ' campos en lugar de 9. QR: ' + JSON.stringify(limpio)
+    );
+    return;
+  }
+
+  if (!/^\d{11}$/.test(p[0]) ||
+      !/^\d{11}$/.test(p[8])) {
+    report('El formato de los RUC no es válido.');
+    return;
+  }
+
+  el('grid').replaceChildren();
+
+  p.forEach((v, i) => {
+    const label = document.createElement('label');
+    label.textContent = names[i];
+
+    const input = document.createElement('input');
+    input.value = v;
+    input.readOnly = true;
+
+    el('grid').append(label, input);
+  });
+
+  el('fields').style.display = 'block';
+  el('raw').value = p.join('|');
+
+  report('QR reconocido correctamente.', true);
+}
 async function stop(){if(scanner){if(active){try{await scanner.stop()}catch(e){}}try{scanner.clear()}catch(e){}scanner=null}active=false;el('start').hidden=false;el('stop').hidden=true}
 el('start').addEventListener('click',async()=>{if(typeof Html5Qrcode==='undefined'){report('No se cargó la librería QR. Comprueba la conexión a Internet.');return}el('start').disabled=true;try{scanner=new Html5Qrcode('reader',{verbose:false});await scanner.start({facingMode:'environment'},{fps:10,qrbox:(w,h)=>{const side=Math.max(140,Math.min(260,Math.floor(Math.min(w,h)*.75)));return {width:side,height:side}}},async text=>{await stop();interpret(text)},()=>{});active=true;el('start').hidden=true;el('stop').hidden=false;report('Cámara abierta. Apunta al QR.',true)}catch(e){const detail=errorText(e);await stop();report('No se pudo abrir la cámara: '+detail+'\nComprueba permisos del sitio y abre el enlace directamente en Safari o Chrome.')}finally{el('start').disabled=false}});
 el('stop').addEventListener('click',stop);
