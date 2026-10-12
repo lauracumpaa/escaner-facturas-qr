@@ -1,66 +1,144 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>Escáner de Facturas QR</title>
-<style>
-*{box-sizing:border-box}body{margin:0;background:#f3f6fa;color:#14243d;font:15px system-ui,-apple-system,Arial,sans-serif;padding:18px}.card{max-width:540px;margin:auto;background:white;border-radius:18px;padding:20px;box-shadow:0 4px 22px #162a4517}h1{font-size:22px;margin:0 0 6px}.muted{color:#63748a;font-size:13px}button{width:100%;background:#153b70;color:white;border:0;border-radius:10px;padding:13px;margin-top:12px;font-size:16px;font-weight:600}button.secondary{background:#e9eef5;color:#153b70}button:disabled{opacity:.5}#reader{margin-top:14px;overflow:hidden;border-radius:12px}#reader video{width:100%!important}label{display:block;font-size:12px;color:#607188;margin:10px 0 3px}input,textarea{width:100%;border:1px solid #cbd5e1;border-radius:8px;padding:10px;font-size:14px}#fields{display:none}#status{margin-top:14px;white-space:pre-wrap;font-size:13px}.ok{color:#17683c}.err{color:#a42d39} .tag{display:inline-block;background:#e9eef5;border-radius:20px;padding:5px 9px;font-size:12px;margin:8px 0}
-</style>
-</head><body><main class="card"><h1>Escáner de Facturas QR</h1><p class="muted">Prueba de lectura desde la cámara de tu celular.</p><span class="tag">Versión de prueba · No guarda facturas</span>
-<button id="start">📷 Abrir cámara</button><button id="stop" class="secondary" hidden>Cerrar cámara</button><div id="reader"></div>
-<p class="muted">También puedes seleccionar una foto nítida del QR:</p><input id="photo" type="file" accept="image/*" capture="environment">
-<p class="muted">O pegar el texto del QR para comprobar su formato:</p><textarea id="raw" rows="3" placeholder="20100049181|01|F533|0475238|7.66|50.20|2026-10-10|6|20616651928"></textarea><button class="secondary" id="interpret">Interpretar texto</button>
-<section id="fields"><h3>Datos detectados</h3><div id="grid"></div></section><div id="status" aria-live="polite"></div></main>
-<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
-<script>
-const el=id=>document.getElementById(id);let scanner=null;let active=false;
-const names=['RUC emisor','Tipo comprobante','Serie','Número de factura','IGV','Importe total','Fecha emisión','Tipo documento receptor','RUC receptor'];
-function report(message,ok=false){el('status').textContent=message;el('status').className=ok?'ok':'err'}
-function errorText(e){return typeof e==='string'?e:(e?.message||String(e))}
-function interpret(raw) {
-  // Eliminar saltos de línea y espacios invisibles
-  const limpio = String(raw || '')
-    .replace(/[\r\n\u2028\u2029]/g, '')
-    .trim();
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Escáner de Facturas QR</title>
+  <style>
+    *{box-sizing:border-box}body{margin:0;padding:18px;background:#f3f6fa;color:#12213b;font-family:system-ui,-apple-system,sans-serif}.wrap{max-width:560px;margin:auto}.card{background:#fff;padding:20px;border-radius:16px;box-shadow:0 3px 15px #182a4415}h1{font-size:23px;margin:0 0 8px}h3{margin-bottom:8px}.muted{color:#5c6a7c;font-size:14px}button{width:100%;border:0;border-radius:10px;padding:13px 16px;font-size:16px;font-weight:600;background:#153b70;color:white;margin-top:12px;cursor:pointer}button:disabled{opacity:.5}button.secondary{background:#e5ebf3;color:#153b70}#reader{width:100%;margin-top:14px;overflow:hidden;border-radius:12px}#reader video{width:100%!important}label{display:block;font-size:12px;color:#617187;margin:12px 0 4px}input,textarea{width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-size:15px;background:#f8fafc}textarea{min-height:86px;resize:vertical}#fields{display:none}#status{white-space:pre-wrap;margin-top:14px;font-size:14px;overflow-wrap:anywhere}.success{color:#146c3b}.error{color:#aa2636}.pill{display:inline-block;background:#e5ebf3;border-radius:30px;padding:6px 12px;font-size:13px;color:#334155}#debug{display:none;margin-top:12px;padding:10px;background:#f1f5f9;border-radius:8px;font-size:12px;white-space:pre-wrap;overflow-wrap:anywhere}#file{margin-top:10px}
+  </style>
+</head>
+<body>
+  <main class="wrap"><section class="card">
+    <h1>Escáner de Facturas QR</h1>
+    <p class="muted">Escanea el QR de una factura electrónica peruana.</p>
+    <span class="pill">Versión 3 · Prueba de lectura · No guarda facturas</span>
+    <button id="start" type="button">📷 Abrir cámara</button>
+    <button id="stop" class="secondary" type="button" hidden>Cerrar cámara</button>
+    <div id="reader"></div>
+    <p class="muted">También puedes seleccionar una fotografía del QR:</p>
+    <input type="file" id="file" accept="image/*">
+    <p class="muted">O pegar el texto del QR:</p>
+    <textarea id="raw" placeholder="20100049181|01|F533|0475238|7.66|50.20|2026-10-10|6|20616651928"></textarea>
+    <button id="interpret" class="secondary" type="button">Interpretar texto</button>
+    <div id="fields"><h3>Datos reconocidos</h3><div id="grid"></div></div>
+    <div id="status" aria-live="polite"></div>
+    <div id="debug"></div>
+  </section></main>
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <script>
+    'use strict';
+    const el = id => document.getElementById(id);
+    const names = ['RUC emisor','Tipo de comprobante','Serie','Número de factura','IGV','Importe total','Fecha de emisión','Tipo documento receptor','RUC receptor'];
+    let scanner = null;
+    let active = false;
+    let processing = false;
 
-  // Separar los campos del QR
-  const p = limpio.split('|').map(v => v.trim());
-
-  if (p.length !== 9) {
-    report(
-      'Se detectaron ' + p.length +
-      ' campos en lugar de 9. QR: ' + JSON.stringify(limpio)
-    );
-    return;
-  }
-
-  if (!/^\d{11}$/.test(p[0]) ||
-      !/^\d{11}$/.test(p[8])) {
-    report('El formato de los RUC no es válido.');
-    return;
-  }
-
-  el('grid').replaceChildren();
-
-  p.forEach((v, i) => {
-    const label = document.createElement('label');
-    label.textContent = names[i];
-
-    const input = document.createElement('input');
-    input.value = v;
-    input.readOnly = true;
-
-    el('grid').append(label, input);
-  });
-
-  el('fields').style.display = 'block';
-  el('raw').value = p.join('|');
-
-  report('QR reconocido correctamente.', true);
-}
-async function stop(){if(scanner){if(active){try{await scanner.stop()}catch(e){}}try{scanner.clear()}catch(e){}scanner=null}active=false;el('start').hidden=false;el('stop').hidden=true}
-el('start').addEventListener('click',async()=>{if(typeof Html5Qrcode==='undefined'){report('No se cargó la librería QR. Comprueba la conexión a Internet.');return}el('start').disabled=true;try{scanner=new Html5Qrcode('reader',{verbose:false});await scanner.start({facingMode:'environment'},{fps:10,qrbox:(w,h)=>{const side=Math.max(140,Math.min(260,Math.floor(Math.min(w,h)*.75)));return {width:side,height:side}}},async text=>{await stop();interpret(text)},()=>{});active=true;el('start').hidden=true;el('stop').hidden=false;report('Cámara abierta. Apunta al QR.',true)}catch(e){const detail=errorText(e);await stop();report('No se pudo abrir la cámara: '+detail+'\nComprueba permisos del sitio y abre el enlace directamente en Safari o Chrome.')}finally{el('start').disabled=false}});
-el('stop').addEventListener('click',stop);
-el('interpret').addEventListener('click',()=>interpret(el('raw').value));
-el('photo').addEventListener('change',async e=>{const file=e.target.files?.[0];if(!file)return;if(typeof Html5Qrcode==='undefined'){report('No se cargó la librería QR.');return}await stop();report('Analizando fotografía...',true);const temp=new Html5Qrcode('reader');try{const decoded=await temp.scanFile(file,true);interpret(decoded)}catch(err){report('No se detectó un QR en la fotografía: '+errorText(err)+'\nPrueba una foto más cercana, bien enfocada y sin reflejos.')}finally{try{temp.clear()}catch(e){}el('photo').value=''}});
-</script></body></html>
+    function report(message, good = false) {
+      el('status').textContent = message;
+      el('status').className = good ? 'success' : 'error';
+    }
+    function errorText(error) {
+      if (typeof error === 'string') return error;
+      return error?.message || String(error);
+    }
+    function interpret(raw) {
+      // No se eliminan los guiones de la fecha; solo caracteres de control y espacios.
+      const original = String(raw ?? '');
+      const limpio = original.replace(/[\r\n\u2028\u2029\u200B\uFEFF]/g, '').trim();
+      const parts = limpio.split('|').map(x => x.trim());
+      el('fields').style.display = 'none';
+      el('debug').style.display = 'none';
+      if (parts.length !== 9) {
+        report('El QR contiene ' + parts.length + ' campos; se esperaban 9.');
+        el('debug').textContent = 'Texto leído (JSON): ' + JSON.stringify(original) + '\nSeparadores | encontrados: ' + (parts.length - 1) + '\nTexto normalizado: ' + JSON.stringify(limpio);
+        el('debug').style.display = 'block';
+        el('raw').value = original;
+        return;
+      }
+      if (!/^\d{11}$/.test(parts[0]) || !/^\d{11}$/.test(parts[8])) {
+        report('El QR contiene 9 campos, pero uno de los RUC no tiene 11 dígitos.');
+        el('debug').textContent = JSON.stringify(parts, null, 2);
+        el('debug').style.display = 'block';
+        return;
+      }
+      const grid = el('grid');
+      grid.replaceChildren();
+      parts.forEach((value, index) => {
+        const label = document.createElement('label');
+        label.textContent = names[index];
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.value = value;
+        input.readOnly = true;
+        grid.append(label, input);
+      });
+      el('raw').value = parts.join('|');
+      el('fields').style.display = 'block';
+      report('QR reconocido correctamente: 9 campos.', true);
+    }
+    async function stop() {
+      if (scanner) {
+        if (active) { try { await scanner.stop(); } catch (e) {} }
+        try { scanner.clear(); } catch (e) {}
+        scanner = null;
+      }
+      active = false;
+      el('start').hidden = false;
+      el('stop').hidden = true;
+    }
+    el('start').addEventListener('click', async () => {
+      if (typeof Html5Qrcode === 'undefined') {
+        report('No se cargó la librería QR. Revisa tu conexión a Internet.');
+        return;
+      }
+      el('start').disabled = true;
+      try {
+        scanner = new Html5Qrcode('reader', { verbose: false });
+        await scanner.start(
+          { facingMode: 'environment' },
+          { fps: 10, qrbox: (w,h) => { const side = Math.max(140, Math.min(260, Math.floor(Math.min(w,h)*.75))); return {width:side,height:side}; } },
+          async decoded => {
+            if (processing) return;
+            processing = true;
+            // Mostrar primero el resultado, sin ventanas alert que bloqueen el lector.
+            interpret(decoded);
+            await stop();
+            processing = false;
+          },
+          () => {}
+        );
+        active = true;
+        el('start').hidden = true;
+        el('stop').hidden = false;
+        report('Cámara abierta. Apunta al QR.', true);
+      } catch (e) {
+        const detail = errorText(e);
+        await stop();
+        report('No se pudo abrir la cámara: ' + detail);
+      } finally {
+        el('start').disabled = false;
+      }
+    });
+    el('stop').addEventListener('click', stop);
+    el('interpret').addEventListener('click', () => interpret(el('raw').value));
+    el('file').addEventListener('change', async event => {
+      const file = event.target.files?.[0];
+      if (!file) return;
+      if (typeof Html5Qrcode === 'undefined') { report('No se cargó la librería QR.'); return; }
+      await stop();
+      const photoReader = new Html5Qrcode('reader', {verbose:false});
+      try {
+        report('Leyendo fotografía...', true);
+        const decoded = await photoReader.scanFile(file, true);
+        interpret(decoded);
+      } catch (e) {
+        report('No se pudo leer el QR de la fotografía: ' + errorText(e));
+      } finally {
+        try { photoReader.clear(); } catch (e) {}
+        el('file').value = '';
+      }
+    });
+  </script>
+</body>
+</html>
